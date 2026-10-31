@@ -1,0 +1,7 @@
+{
+  "name": "telugu-captions",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Upload a Telugu video, get Telugu + English captions (SRT/VTT).",
+  "engines": { "node": ">=18" }
+}

@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Telugu Captions – upload a video, get English captions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=Noto+Sans+Telugu:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#E8ECEF; --panel:#FFFFFF; --ink:#16202E; --muted:#5B6878; --line:#D3DAE1;
+  --teal:#0E6B6B; --teal-d:#0A5252; --marigold:#FFC93C; --danger:#B3261E; --ok:#1E7B4B;
+  --ui:'Bricolage Grotesque',system-ui,sans-serif; --te:'Noto Sans Telugu','Nirmala UI',sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--ui);line-height:1.5;-webkit-font-smoothing:antialiased}
+.te{font-family:var(--te)}
+:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+header{max-width:1280px;margin:0 auto;padding:28px 24px 8px;display:flex;align-items:baseline;gap:18px;flex-wrap:wrap}
+header h1{font-size:clamp(26px,3.4vw,38px);margin:0;letter-spacing:-.02em;font-weight:700}
+header p{margin:0;color:var(--muted);max-width:60ch}
+main{max-width:1280px;margin:0 auto;padding:16px 24px 64px;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:24px;align-items:start}
+@media(max-width:980px){main{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px}
+.stack{display:flex;flex-direction:column;gap:20px}
+.left{position:sticky;top:16px}
+@media(max-width:980px){.left{position:static}}
+
+/* drop zone */
+.drop{border:2px dashed #9AA8B6;border-radius:12px;padding:44px 20px;text-align:center;cursor:pointer;transition:background .15s,border-color .15s;background:#F7F9FA}
+.drop:hover,.drop.over{background:#E9F4F3;border-color:var(--teal)}
+.drop .big{font-family:var(--te);font-size:26px;font-weight:600;margin-bottom:4px}
+.drop small{color:var(--muted)}
+video{width:100%;display:block;background:#000;border-radius:10px;max-height:62vh}
+.stage{position:relative}
+.overlay{position:absolute;left:0;right:0;bottom:56px;display:flex;flex-direction:column;align-items:center;gap:4px;pointer-events:none;padding:0 6%}
+.overlay span{background:rgba(0,0,0,.72);color:#fff;padding:3px 12px;border-radius:6px;font-size:clamp(14px,2.2vw,22px);line-height:1.35;white-space:pre-line;text-align:center;font-weight:600}
+.overlay span.te{color:var(--marigold);font-size:clamp(13px,1.9vw,19px);font-weight:400}
+.overlay span:empty{display:none}
+
+/* controls */
+label.f{display:block;font-size:14px;font-weight:600;margin-bottom:6px}
+input[type=text],input[type=password],textarea,input[type=number]{width:100%;font:inherit;color:inherit;border:1px solid var(--line);border-radius:8px;padding:9px 11px;background:#fff}
+textarea{resize:vertical;min-height:44px}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.btn{font:inherit;font-weight:600;border:0;border-radius:9px;padding:11px 18px;cursor:pointer;background:var(--teal);color:#fff;transition:background .15s}
+.btn:hover{background:var(--teal-d)}
+.btn:disabled{background:#9DB3B3;cursor:not-allowed}
+.btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.btn.ghost:hover{background:#F0F3F5}
+.btn.sm{padding:7px 12px;font-size:14px}
+.chk{display:inline-flex;gap:7px;align-items:center;font-size:14px;cursor:pointer}
+.hint{color:var(--muted);font-size:13px}
+
+/* progress */
+.progress{margin-top:14px}
+.bar{height:8px;background:#E3E8EC;border-radius:99px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--teal);transition:width .25s}
+.status{font-size:14px;margin-top:8px;color:var(--muted)}
+.status.err{color:var(--danger);font-weight:600}
+.status.ok{color:var(--ok);font-weight:600}
+
+/* caption list */
+.list-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.list-head h2{font-size:18px;margin:0}
+.seg{border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:10px;background:#fff}
+.seg.active{border-color:var(--teal);box-shadow:0 0 0 2px rgba(14,107,107,.18)}
+.seg .meta{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+.seg .meta input{width:78px;padding:5px 8px;font-size:13px}
+.seg .meta button{margin-left:auto}
+.seg textarea.te{font-family:var(--te);margin-top:6px;background:#FBFAF3}
+.seg .tag{font-size:12px;color:var(--muted);margin:6px 0 2px}
+.scroll{max-height:calc(100vh - 260px);min-height:260px;overflow:auto;padding-right:4px}
+.empty{color:var(--muted);text-align:center;padding:48px 12px}
+.dl{display:flex;gap:8px;flex-wrap:wrap}
+.hidden{display:none!important}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Telugu video in, English captions out</h1>
+  <p>Upload a video. The speech is transcribed in Telugu, translated into English, and timed as subtitles you can edit and download.</p>
+</header>
+
+<main>
+  <!-- LEFT: upload + player -->
+  <section class="left stack">
+    <div class="panel">
+      <div id="drop" class="drop" tabindex="0" role="button" aria-label="Choose a video file">
+        <div class="big">వీడియోను ఇక్కడ ఉంచండి</div>
+        <div><strong>Drop a video here</strong> or click to choose</div>
+        <small>MP4, MOV, MKV, WebM, or an audio file · best under ~60 minutes</small>
+      </div>
+      <input id="file" type="file" accept="video/*,audio/*" class="hidden">
+
+      <div id="playerWrap" class="hidden">
+        <div class="stage">
+          <video id="video" controls playsinline></video>
+          <div class="overlay" id="overlay"><span id="ovEn"></span><span id="ovTe" class="te"></span></div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <label class="chk"><input type="checkbox" id="showEn" checked> English captions</label>
+          <label class="chk"><input type="checkbox" id="showTe"> Telugu captions</label>
+          <button class="btn ghost sm" id="changeFile" style="margin-left:auto">Choose another video</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <label class="f" for="topic">What is the video about? <span class="hint">(optional, improves names and terms)</span></label>
+      <input type="text" id="topic" placeholder="e.g. cooking tutorial, cricket commentary, interview with a farmer">
+      <div id="accessBox" class="hidden" style="margin-top:12px">
+        <label class="f" for="access">Access code</label>
+        <input type="password" id="access" autocomplete="off">
+      </div>
+      <div id="apiKeyBox" style="margin-top:12px">
+        <label class="f" for="groqKey">Groq API Key <span class="hint">(Free from <a href="https://console.groq.com/keys" target="_blank" rel="noopener" style="color:var(--teal)">console.groq.com</a> &mdash; stored locally in your browser)</span></label>
+        <input type="password" id="groqKey" placeholder="gsk_..." autocomplete="off">
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn" id="go" disabled>Generate captions</button>
+        <button class="btn ghost" id="cancel" disabled>Stop</button>
+      </div>
+      <div class="progress">
+        <div class="bar"><i id="barFill"></i></div>
+        <div class="status" id="status">Choose a video to begin.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RIGHT: captions -->
+  <section class="panel">
+    <div class="list-head">
+      <h2>Captions</h2>
+      <div class="dl" id="dl">
+        <button class="btn sm" data-dl="en-srt" disabled>English .srt</button>
+        <button class="btn ghost sm" data-dl="en-vtt" disabled>English .vtt</button>
+        <button class="btn ghost sm" data-dl="te-srt" disabled>Telugu .srt</button>
+        <button class="btn ghost sm" data-dl="te-vtt" disabled>Telugu .vtt</button>
+        <button class="btn ghost sm" data-dl="txt" disabled>Transcript .txt</button>
+      </div>
+    </div>
+    <div class="hint" style="margin-bottom:10px">Speech recognition is very good but not flawless. Click any line to jump to it, fix wording, and your downloads use the edited text.</div>
+    <div id="list" class="scroll"><div class="empty">Your captions will appear here.</div></div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const SR = 16000;
+  const CHUNK_SEC = 90;               // keeps each upload ~2.9 MB (Vercel body limit is 4.5 MB)
+  const TRANSLATE_BATCH = 15;
+
+  let file = null, segs = [], cuesEn = [], cuesTe = [], nextId = 1, running = false, cancelled = false;
+
+  /* ---------- helpers ---------- */
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const status = (msg, cls = '') => { const s = $('status'); s.textContent = msg; s.className = 'status ' + cls; };
+  const progress = (p) => { $('barFill').style.width = Math.max(0, Math.min(100, p * 100)) + '%'; };
+  const accessCode = () => ($('access').value || localStorage.getItem('tc_access') || '');
+  $('access').value = localStorage.getItem('tc_access') || '';
+  $('access').addEventListener('change', () => localStorage.setItem('tc_access', $('access').value));
+
+  const groqApiKey = () => ($('groqKey').value || localStorage.getItem('tc_groq_key') || '').trim();
+  $('groqKey').value = localStorage.getItem('tc_groq_key') || '';
+  $('groqKey').addEventListener('input', () => localStorage.setItem('tc_groq_key', $('groqKey').value.trim()));
+
+  const BASE_PROMPT = 'ఇది తెలుగు భాషలో మాట్లాడిన వీడియో. సరైన విరామ చిహ్నాలతో తెలుగు లిపిలో రాయండి.';
+  const TRANSLATE_SYSTEM = `You are a professional Telugu-to-English subtitle translator.
+You receive numbered Telugu subtitle lines produced by speech recognition (they may contain small recognition errors).
+Rules:
+- Translate each line into natural, fluent, concise English suitable for subtitles.
+- Fix obvious speech-recognition mistakes using the surrounding lines and the topic hint, but never invent content.
+- Keep names, places, numbers, and technical terms accurate. Transliterate proper nouns normally (e.g. Hyderabad, Vijayawada).
+- Keep the meaning and tone of the speaker (casual stays casual).
+- Return exactly one English line per input id. If a line is only noise or filler, return an empty string.
+- Output ONLY valid JSON: {"translations":[{"id":<number>,"text":"<English>"}]}`;
+
+  async function directTranscribe(wavBuffer, promptText, key) {
+    const fd = new FormData();
+    fd.append('file', new Blob([wavBuffer], { type: 'audio/wav' }), 'chunk.wav');
+    fd.append('model', 'whisper-large-v3');
+    fd.append('language', 'te');
+    fd.append('response_format', 'verbose_json');
+    fd.append('temperature', '0');
+    fd.append('prompt', (BASE_PROMPT + ' ' + (promptText || '').slice(-180)).trim());
+    fd.append('timestamp_granularities[]', 'segment');
+
+    const r = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}` },
+      body: fd,
+    });
+    if (!r.ok) {
+      const t = await r.text();
+      let msg = t;
+      try { msg = JSON.parse(t).error.message; } catch (_) {}
+      throw new Error('Transcription failed: ' + msg);
+    }
+    const data = await r.json();
+    return {
+      segments: (data.segments || []).map((s) => ({
+        start: s.start,
+        end: s.end,
+        text: (s.text || '').trim(),
+        no_speech_prob: s.no_speech_prob,
+        avg_logprob: s.avg_logprob,
+        compression_ratio: s.compression_ratio,
+      }))
+    };
+  }
+
+  async function directTranslate(items, context, topic, key) {
+    if (!items.length) return { translations: [] };
+    const user =
+      (topic ? `Topic / context of the video: ${String(topic).slice(0, 300)}\n\n` : '') +
+      (context.length ? `Previous English subtitles (for continuity only, do not repeat):\n${context.join('\n')}\n\n` : '') +
+      `Translate these lines:\n${JSON.stringify(items)}`;
+
+    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        temperature: 0.2,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: TRANSLATE_SYSTEM },
+          { role: 'user', content: user },
+        ],
+      }),
+    });
+    if (!r.ok) {
+      const t = await r.text();
+      let msg = t;
+      try { msg = JSON.parse(t).error.message; } catch (_) {}
+      throw new Error('Translation failed: ' + msg);
+    }
+    const data = await r.json();
+    let parsed = {};
+    try { parsed = JSON.parse(data.choices[0].message.content); } catch (_) {}
+    const map = new Map((parsed.translations || []).map((t) => [Number(t.id), String(t.text || '').trim()]));
+    return { translations: items.map((it) => ({ id: it.id, text: map.get(Number(it.id)) || '' })) };
+  }
+
+  async function api(url, init, tries = 4) {
+    const key = groqApiKey();
+    if (key) {
+      if (url.startsWith('/api/transcribe')) {
+        const u = new URL(url, window.location.href);
+        const prompt = u.searchParams.get('prompt') || '';
+        return await directTranscribe(init.body, prompt, key);
+      }
+      if (url.startsWith('/api/translate')) {
+        const payload = typeof init.body === 'string' ? JSON.parse(init.body) : init.body;
+        return await directTranslate(payload.items || [], payload.context || [], payload.topic || '', key);
+      }
+    }
+
+    for (let i = 0; i < tries; i++) {
+      if (cancelled) throw new Error('Stopped.');
+      init.headers = Object.assign({}, init.headers, { 'x-access-code': accessCode() });
+      let r;
+      try { r = await fetch(url, init); }
+      catch (e) { if (i < tries - 1) { await sleep(2000 * (i + 1)); continue; } throw new Error('Network error. Check your connection.'); }
+      if (r.ok) return r.json();
+      if (r.status === 401) { $('accessBox').classList.remove('hidden'); throw new Error('Enter the access code for this site, then try again.'); }
+      if (r.status === 404) {
+        $('groqKey').focus();
+        throw new Error('API route not found. On static hosting (like GitHub Pages), enter your free Groq API key above to transcribe.');
+      }
+      if ((r.status === 429 || r.status >= 500) && i < tries - 1) { await sleep(3000 * (i + 1)); continue; }
+      let msg = ''; try { msg = (await r.json()).error; } catch (_) {}
+      if (msg && msg.includes('GROQ_API_KEY is not set')) {
+        $('groqKey').focus();
+        throw new Error('GROQ_API_KEY is not set on the server. Please enter your free Groq API key above.');
+      }
+      throw new Error(msg || ('Request failed (' + r.status + ')'));
+    }
+  }
+
+  /* ---------- file selection ---------- */
+  const drop = $('drop'), fileInput = $('file'), video = $('video');
+  drop.addEventListener('click', () => fileInput.click());
+  drop.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+  $('changeFile').addEventListener('click', () => fileInput.click());
+  ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', (e) => { if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); });
+  fileInput.addEventListener('change', () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+
+  function setFile(f) {
+    if (running) return;
+    file = f;
+    if (video.src) URL.revokeObjectURL(video.src);
+    video.src = URL.createObjectURL(f);
+    drop.classList.add('hidden');
+    $('playerWrap').classList.remove('hidden');
+    $('go').disabled = false;
+    segs = []; rebuildCues(); renderList(); setDownloads(false);
+    progress(0);
+    status(f.name + ' (' + (f.size / 1048576).toFixed(1) + ' MB) is ready.');
+  }
+
+  /* ---------- audio extraction (in the browser, so only small audio is uploaded) ---------- */
+  async function extractAudio(f) {
+    const buf = await f.arrayBuffer();
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AC();
+    let decoded;
+    try { decoded = await ctx.decodeAudioData(buf); }
+    catch (e) { ctx.close(); throw new Error('Your browser could not read audio from this file. Try an MP4 (H.264/AAC) or MP3/WAV version.'); }
+    ctx.close();
+    const off = new OfflineAudioContext(1, Math.ceil(decoded.duration * SR), SR);
+    const src = off.createBufferSource();
+    src.buffer = decoded; src.connect(off.destination); src.start();
+    const rendered = await off.startRendering();
+    return rendered.getChannelData(0);
+  }
+
+  function planChunks(pcm) {
+    const bounds = [0]; let pos = 0;
+    while (pcm.length - pos > (CHUNK_SEC + 8) * SR) {
+      // cut at the quietest 200 ms in the last 6 s of the window, so words are not split
+      const end = pos + CHUNK_SEC * SR, from = end - 6 * SR, win = Math.floor(0.2 * SR), step = Math.floor(0.1 * SR);
+      let best = end, bestE = Infinity;
+      for (let s = from; s + win <= end; s += step) {
+        let e = 0; for (let i = s; i < s + win; i += 4) e += Math.abs(pcm[i]);
+        if (e < bestE) { bestE = e; best = s + (win >> 1); }
+      }
+      bounds.push(best); pos = best;
+    }
+    bounds.push(pcm.length);
+    return bounds;
+  }
+
+  function wavFromFloat(f32) {
+    const n = f32.length, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+    const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, SR, true); v.setUint32(28, SR * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    w(36, 'data'); v.setUint32(40, n * 2, true);
+    for (let i = 0; i < n; i++) { const s = Math.max(-1, Math.min(1, f32[i])); v.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true); }
+    return buf;
+  }
+
+  const isSilent = (a) => { let m = 0; for (let i = 0; i < a.length; i += 16) { const x = Math.abs(a[i]); if (x > m) m = x; } return m < 0.003; };
+
+  /* ---------- main pipeline ---------- */
+  $('go').addEventListener('click', run);
+  $('cancel').addEventListener('click', () => { cancelled = true; status('Stopping…'); });
+
+  async function run() {
+    if (!file || running) return;
+    running = true; cancelled = false; segs = []; nextId = 1;
+    $('go').disabled = true; $('cancel').disabled = false; setDownloads(false);
+    rebuildCues(); renderList(); progress(0.02);
+    try {
+      status('Reading the audio from your video…');
+      const pcm = await extractAudio(file);
+      if (cancelled) throw new Error('Stopped.');
+      const bounds = planChunks(pcm), total = bounds.length - 1;
+      let lastText = '', kept = 0;
+
+      // 1) Telugu transcription, chunk by chunk
+      for (let c = 0; c < total; c++) {
+        status('Transcribing Telugu speech… part ' + (c + 1) + ' of ' + total);
+        progress(0.05 + 0.55 * (c / total));
+        const part = pcm.subarray(bounds[c], bounds[c + 1]);
+        if (isSilent(part)) continue;
+        const offset = bounds[c] / SR;
+        const data = await api('/api/transcribe?prompt=' + encodeURIComponent(lastText.slice(-120)), {
+          method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: wavFromFloat(part),
+        });
+        for (const s of data.segments) {
+          if (!s.text) continue;
+          // drop typical Whisper hallucinations on silence/noise
+          if ((s.no_speech_prob > 0.6 && s.avg_logprob < -0.8) || s.compression_ratio > 2.6 || s.avg_logprob < -1.6) continue;
+          const prev = segs[segs.length - 1];
+          if (prev && prev.te === s.text && kept > 0) { prev.end = offset + s.end; continue; }
+          segs.push({ id: nextId++, start: +(offset + s.start).toFixed(2), end: +(offset + s.end).toFixed(2), te: s.text, en: '' });
+          kept++;
+        }
+        if (data.segments.length) lastText = data.segments.map((s) => s.text).join(' ');
+        rebuildCues(); renderList();
+      }
+      if (!segs.length) throw new Error('No speech was detected in this file.');
+
+      // 2) English translation in batches (with context from the previous lines)
+      const topic = $('topic').value.trim();
+      for (let i = 0; i < segs.length; i += TRANSLATE_BATCH) {
+        status('Translating to English… ' + Math.min(i + TRANSLATE_BATCH, segs.length) + ' of ' + segs.length + ' lines');
+        progress(0.62 + 0.36 * (i / segs.length));
+        const batch = segs.slice(i, i + TRANSLATE_BATCH);
+        const context = segs.slice(Math.max(0, i - 3), i).map((s) => s.en).filter(Boolean);
+        const data = await api('/api/translate', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: batch.map((s) => ({ id: s.id, te: s.te })), context, topic }),
+        });
+        for (const t of data.translations) { const s = segs.find((x) => x.id === t.id); if (s) s.en = t.text; }
+        rebuildCues(); renderList();
+      }
+
+      progress(1);
+      status('Done. ' + segs.length + ' caption lines. Review them, then download.', 'ok');
+      setDownloads(true);
+    } catch (e) {
+      status(e.message || String(e), e.message === 'Stopped.' ? '' : 'err');
+      if (segs.length) setDownloads(true);
+    } finally {
+      running = false; $('go').disabled = false; $('cancel').disabled = true;
+    }
+  }
+
+  /* ---------- cues (readable subtitle lines) ---------- */
+  function wrapLines(text, max) {
+    text = text.trim().replace(/\s+/g, ' ');
+    if (text.length <= max) return text;
+    const w = text.split(' ');
+    let best = 1, bd = Infinity;
+    for (let i = 1; i < w.length; i++) { const a = w.slice(0, i).join(' ').length, b = text.length - a - 1, d = Math.abs(a - b); if (d < bd) { bd = d; best = i; } }
+    return w.slice(0, best).join(' ') + '\n' + w.slice(best).join(' ');
+  }
+  function makeCues(list, key, maxChars) {
+    const out = [], per = maxChars * 2 - 4;
+    for (const s of list) {
+      const t = (s[key] || '').trim(); if (!t) continue;
+      const dur = Math.max(0.4, s.end - s.start), pieces = []; let cur = [];
+      for (const w of t.split(/\s+/)) {
+        if ([...cur, w].join(' ').length > per && cur.length) { pieces.push(cur.join(' ')); cur = [w]; } else cur.push(w);
+      }
+      if (cur.length) pieces.push(cur.join(' '));
+      const tot = pieces.reduce((a, p) => a + p.length, 0); let t0 = s.start;
+      for (const p of pieces) { const d = dur * p.length / tot; out.push({ start: t0, end: t0 + d, text: wrapLines(p, maxChars), seg: s.id }); t0 += d; }
+    }
+    return out;
+  }
+  function rebuildCues() { cuesEn = makeCues(segs, 'en', 42); cuesTe = makeCues(segs, 'te', 34); }
+
+  /* ---------- live overlay + active row ---------- */
+  let lastActive = -1;
+  function tick() {
+    const t = video.currentTime;
+    const find = (arr) => { for (const c of arr) if (t >= c.start && t < c.end) return c; return null; };
+    $('ovEn').textContent = $('showEn').checked ? (find(cuesEn)?.text || '') : '';
+    $('ovTe').textContent = $('showTe').checked ? (find(cuesTe)?.text || '') : '';
+    const seg = segs.find((s) => t >= s.start && t < s.end);
+    const id = seg ? seg.id : -1;
+    if (id !== lastActive) {
+      lastActive = id;
+      document.querySelectorAll('.seg.active').forEach((n) => n.classList.remove('active'));
+      if (seg) {
+        const n = document.querySelector('.seg[data-id="' + id + '"]');
+        if (n) { n.classList.add('active'); if (!video.paused) n.scrollIntoView({ block: 'nearest' }); }
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  /* ---------- caption editor ---------- */
+  const fmtTime = (s) => (s || 0).toFixed(1);
+  function renderList() {
+    const list = $('list');
+    if (!segs.length) { list.innerHTML = '<div class="empty">Your captions will appear here.</div>'; return; }
+    // keep scroll + focus stable while background updates arrive
+    if (list.contains(document.activeElement) && document.activeElement.tagName === 'TEXTAREA') { patchRows(); return; }
+    const sc = list.scrollTop;
+    list.innerHTML = '';
+    for (const s of segs) {
+      const d = document.createElement('div');
+      d.className = 'seg'; d.dataset.id = s.id;
+      d.innerHTML =
+        '<div class="meta"><input type="number" step="0.1" min="0" data-f="start" aria-label="Start seconds"> <span>to</span> <input type="number" step="0.1" min="0" data-f="end" aria-label="End seconds"> <span class="hint">sec</span><button class="btn ghost sm" data-del>Delete</button></div>' +
+        '<div class="tag">English</div><textarea data-f="en" rows="2"></textarea>' +
+        '<div class="tag">Telugu</div><textarea class="te" data-f="te" rows="2"></textarea>';
+      d.querySelector('[data-f=start]').value = fmtTime(s.start);
+      d.querySelector('[data-f=end]').value = fmtTime(s.end);
+      d.querySelector('[data-f=en]').value = s.en;
+      d.querySelector('[data-f=te]').value = s.te;
+      list.appendChild(d);
+    }
+    list.scrollTop = sc;
+  }
+  function patchRows() {
+    for (const s of segs) {
+      const row = document.querySelector('.seg[data-id="' + s.id + '"]');
+      if (!row) { renderListForce(); return; }
+      const en = row.querySelector('[data-f=en]');
+      if (document.activeElement !== en) en.value = s.en;
+    }
+  }
+  function renderListForce() { const a = document.activeElement; if (a) a.blur(); renderList(); }
+
+  $('list').addEventListener('input', (e) => {
+    const row = e.target.closest('.seg'); if (!row) return;
+    const s = segs.find((x) => x.id === +row.dataset.id); if (!s) return;
+    const f = e.target.dataset.f; if (!f) return;
+    s[f] = (f === 'start' || f === 'end') ? parseFloat(e.target.value) || 0 : e.target.value;
+    rebuildCues();
+  });
+  $('list').addEventListener('click', (e) => {
+    const row = e.target.closest('.seg'); if (!row) return;
+    const s = segs.find((x) => x.id === +row.dataset.id); if (!s) return;
+    if (e.target.matches('[data-del]')) { segs = segs.filter((x) => x !== s); rebuildCues(); renderListForce(); return; }
+    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') { if (Math.abs(video.currentTime - s.start) > 0.5) video.currentTime = s.start; }
+  });
+
+  /* ---------- downloads ---------- */
+  function setDownloads(on) { document.querySelectorAll('[data-dl]').forEach((b) => (b.disabled = !on)); }
+  const pad = (n, l = 2) => String(n).padStart(l, '0');
+  function ts(sec, comma) {
+    const ms = Math.round(sec * 1000), h = Math.floor(ms / 3600000), m = Math.floor(ms % 3600000 / 60000), s = Math.floor(ms % 60000 / 1000);
+    return pad(h) + ':' + pad(m) + ':' + pad(s) + (comma ? ',' : '.') + pad(ms % 1000, 3);
+  }
+  const toSrt = (cues) => cues.map((c, i) => (i + 1) + '\n' + ts(c.start, true) + ' --> ' + ts(c.end, true) + '\n' + c.text + '\n').join('\n');
+  const toVtt = (cues) => 'WEBVTT\n\n' + cues.map((c) => ts(c.start, false) + ' --> ' + ts(c.end, false) + '\n' + c.text + '\n').join('\n');
+  function save(name, text, type) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['\ufeff' + text], { type: type + ';charset=utf-8' }));
+    a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+  $('dl').addEventListener('click', (e) => {
+    const k = e.target.dataset.dl; if (!k) return;
+    rebuildCues();
+    const base = (file ? file.name.replace(/\.[^.]+$/, '') : 'captions');
+    if (k === 'en-srt') save(base + '.en.srt', toSrt(cuesEn), 'application/x-subrip');
+    if (k === 'en-vtt') save(base + '.en.vtt', toVtt(cuesEn), 'text/vtt');
+    if (k === 'te-srt') save(base + '.te.srt', toSrt(cuesTe), 'application/x-subrip');
+    if (k === 'te-vtt') save(base + '.te.vtt', toVtt(cuesTe), 'text/vtt');
+    if (k === 'txt') save(base + '.txt', segs.map((s) => '[' + ts(s.start, false).slice(0, 8) + '] ' + s.te + '\n' + '           ' + s.en).join('\n\n'), 'text/plain');
+  });
+})();
+</script>
+</body>
+</html>
