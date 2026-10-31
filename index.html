@@ -166,6 +166,17 @@ textarea{resize:vertical;min-height:44px}
   $('access').value = localStorage.getItem('tc_access') || '';
   $('access').addEventListener('change', () => localStorage.setItem('tc_access', $('access').value));
 
+  // Auto-detect key from URL hash (#key=gsk_...) or query (?key=gsk_...) for 1-click setup
+  const hashMatch = window.location.hash.match(/key=([a-zA-Z0-9_-]+)/);
+  const searchMatch = new URLSearchParams(window.location.search).get('key');
+  const urlKey = (hashMatch ? hashMatch[1] : null) || searchMatch;
+  if (urlKey) {
+    localStorage.setItem('tc_groq_key', urlKey);
+    if (window.history && window.history.replaceState) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }
+
   const groqApiKey = () => ($('groqKey').value || localStorage.getItem('tc_groq_key') || '').trim();
   $('groqKey').value = localStorage.getItem('tc_groq_key') || '';
   $('groqKey').addEventListener('input', () => localStorage.setItem('tc_groq_key', $('groqKey').value.trim()));
@@ -215,6 +226,9 @@ Rules:
     };
   }
 
+  const TRANSLATE_MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b', 'llama-3.3-70b-versatile'];
+  let currentTranslateModel = TRANSLATE_MODELS[0];
+
   async function directTranslate(items, context, topic, key) {
     if (!items.length) return { translations: [] };
     const user =
@@ -222,33 +236,45 @@ Rules:
       (context.length ? `Previous English subtitles (for continuity only, do not repeat):\n${context.join('\n')}\n\n` : '') +
       `Translate these lines:\n${JSON.stringify(items)}`;
 
-    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        temperature: 0.2,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: TRANSLATE_SYSTEM },
-          { role: 'user', content: user },
-        ],
-      }),
-    });
-    if (!r.ok) {
-      const t = await r.text();
-      let msg = t;
-      try { msg = JSON.parse(t).error.message; } catch (_) {}
-      throw new Error('Translation failed: ' + msg);
+    let lastErr = null;
+    for (const model of [currentTranslateModel, ...TRANSLATE_MODELS.filter((m) => m !== currentTranslateModel)]) {
+      try {
+        const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${key}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: model,
+            temperature: 0.2,
+            response_format: { type: 'json_object' },
+            messages: [
+              { role: 'system', content: TRANSLATE_SYSTEM },
+              { role: 'user', content: user },
+            ],
+          }),
+        });
+        if (r.ok) {
+          currentTranslateModel = model;
+          const data = await r.json();
+          let parsed = {};
+          try { parsed = JSON.parse(data.choices[0].message.content); } catch (_) {}
+          const map = new Map((parsed.translations || []).map((t) => [Number(t.id), String(t.text || '').trim()]));
+          return { translations: items.map((it) => ({ id: it.id, text: map.get(Number(it.id)) || '' })) };
+        }
+        const t = await r.text();
+        let msg = t;
+        try { msg = JSON.parse(t).error.message; } catch (_) {}
+        lastErr = msg;
+        if (r.status === 404) continue;
+        throw new Error('Translation failed: ' + msg);
+      } catch (err) {
+        lastErr = err.message;
+        if (err.message && err.message.includes('Translation failed:')) throw err;
+      }
     }
-    const data = await r.json();
-    let parsed = {};
-    try { parsed = JSON.parse(data.choices[0].message.content); } catch (_) {}
-    const map = new Map((parsed.translations || []).map((t) => [Number(t.id), String(t.text || '').trim()]));
-    return { translations: items.map((it) => ({ id: it.id, text: map.get(Number(it.id)) || '' })) };
+    throw new Error('Translation failed: ' + (lastErr || 'No models available'));
   }
 
   async function api(url, init, tries = 4) {

@@ -26,31 +26,55 @@ module.exports = async (req, res) => {
       (context.length ? `Previous English subtitles (for continuity only, do not repeat):\n${context.join('\n')}\n\n` : '') +
       `Translate these lines:\n${JSON.stringify(items)}`;
 
-    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: process.env.TRANSLATE_MODEL || 'llama-3.3-70b-versatile',
-        temperature: 0.2,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: SYSTEM },
-          { role: 'user', content: user },
-        ],
-      }),
-    });
+    const candidateModels = [
+      process.env.TRANSLATE_MODEL,
+      'openai/gpt-oss-120b',
+      'openai/gpt-oss-20b',
+      'qwen/qwen3.8-27b',
+      'llama-3.3-70b-versatile',
+    ].filter(Boolean);
 
-    if (!r.ok) {
-      const t = await r.text();
-      let msg = t;
-      try { msg = JSON.parse(t).error.message; } catch (_) {}
-      return res.status(r.status === 429 ? 429 : 502).json({ error: 'Translation failed: ' + msg });
+    let lastError = null;
+    let data = null;
+
+    for (const model of candidateModels) {
+      try {
+        const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: model,
+            temperature: 0.2,
+            response_format: { type: 'json_object' },
+            messages: [
+              { role: 'system', content: SYSTEM },
+              { role: 'user', content: user },
+            ],
+          }),
+        });
+
+        if (!r.ok) {
+          const t = await r.text();
+          let msg = t;
+          try { msg = JSON.parse(t).error.message; } catch (_) {}
+          lastError = msg;
+          if (r.status === 404) continue;
+          return res.status(r.status === 429 ? 429 : 502).json({ error: 'Translation failed: ' + msg });
+        }
+
+        data = await r.json();
+        break;
+      } catch (err) {
+        lastError = err.message;
+      }
     }
 
-    const data = await r.json();
+    if (!data) {
+      return res.status(502).json({ error: 'Translation failed: ' + (lastError || 'No available models') });
+    }
     let parsed = {};
     try { parsed = JSON.parse(data.choices[0].message.content); } catch (_) {}
     const map = new Map((parsed.translations || []).map((t) => [Number(t.id), String(t.text || '').trim()]));
